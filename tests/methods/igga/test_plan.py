@@ -151,6 +151,7 @@ def protocol(plan):
     return whole(plan.chain())
 
 
+@pytest.mark.slow
 def test_a_plain_run_orders_its_blocks_assembles_and_moves_the_library(plan):
     assert [one.title for one in plan.chain().protocols] == [ORDERING, ASSEMBLY, FINAL]
 
@@ -162,6 +163,7 @@ def test_a_pool_splits_ordering_from_making_the_cargo(pooled):
     assert [one.title for one in made.chain().protocols] == [ORDERING, CREATION, ASSEMBLY, FINAL]
 
 
+@pytest.mark.slow
 def test_a_run_without_a_pool_takes_its_cargo_from_the_vendors_tube(plan, pooled):
     """A run that archives nothing takes the blocks as the vendor shipped them."""
     made, _files = pooled
@@ -177,6 +179,7 @@ def test_a_run_without_a_pool_takes_its_cargo_from_the_vendors_tube(plan, pooled
         assert chain.audit()[0].status == "pass", chain.audit()[0].detail
 
 
+@pytest.mark.slow
 def test_each_protocol_of_the_chain_answers_for_its_own_page(plan):
     run = plan.chain()
     ordering, assembly = run.protocols[0], run.protocols[1]
@@ -187,6 +190,7 @@ def test_each_protocol_of_the_chain_answers_for_its_own_page(plan):
     assert assembly.equipment[: len(ROUND_EQUIPMENT)] == ROUND_EQUIPMENT
 
 
+@pytest.mark.slow
 def test_each_page_names_the_sequencer_its_own_reads_ask_for(plan):
     """The instruments follow from the reads a page runs, never from a sentence beside them."""
     chain = plan.chain()
@@ -264,6 +268,7 @@ def test_a_build_naming_no_primer_set_writes_no_block_vector(written):
     assert files.block_vectors == ()
 
 
+@pytest.mark.slow
 def test_the_same_inputs_write_the_same_bytes(written, tmp_path):
     plan, once = written
     twice = plan.write(tmp_path / "twice")
@@ -321,6 +326,7 @@ def test_the_finished_library_is_read_for_linkage_and_for_representation(protoco
     assert said.count("after every later bottleneck") == 1
 
 
+@pytest.mark.slow
 def test_a_build_may_state_the_four_numbers_the_method_leaves_open(pooled):
     """Stated, each prints as this run's own and its hole goes; stated nowhere, the hole stands."""
     made, _files = pooled
@@ -381,6 +387,7 @@ def test_both_read_steps_name_their_pair_and_its_amplicon(plan, protocol):
     assert "long read" in " ".join(linkage.instructions)
 
 
+@pytest.mark.slow
 def test_every_sheet_the_run_writes_is_one_its_pages_can_link(plan, pooled):
     """A page links a filename only where the run states the file, so the run states them all."""
     run = plan.chain()
@@ -486,6 +493,7 @@ def test_a_working_vector_fixes_the_cargo_enzyme_before_a_block_is_designed(inpu
     assert [one.site.enzyme for one in changed.changes] == [alone]
 
 
+@pytest.mark.slow
 def test_a_working_vector_is_written_out_with_its_cassette_in(inputs, tmp_path):
     """The backbone the build names does not open; the record the plan writes does."""
     made = plan_igga(

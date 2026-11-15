@@ -283,6 +283,7 @@ def test_an_insert_of_exactly_the_offset_and_the_allowance_keeps_its_junction_pr
     ]
 
 
+@pytest.mark.slow
 def test_a_junction_set_whose_last_position_passes_the_length_reads_across_the_origin(
     product: SequenceRecord, puc19: SequenceRecord, junctions: tuple[int, int]
 ) -> None:

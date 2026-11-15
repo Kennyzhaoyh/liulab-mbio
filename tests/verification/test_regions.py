@@ -86,6 +86,7 @@ def test_a_repeated_part_takes_an_ordinal():
 
 
 @pytest.mark.parametrize("turn", [444, 450])
+@pytest.mark.slow
 def test_a_product_whose_origin_lies_in_a_junction_judges_the_insert_and_not_the_vector(
     puc19, gfp, turn
 ):
