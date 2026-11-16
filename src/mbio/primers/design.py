@@ -2,12 +2,17 @@
 
 import heapq
 import math
-from collections.abc import Container, Iterator
+from collections.abc import Callable, Container, Iterator
 from dataclasses import dataclass
-from itertools import groupby
 
 from mbio.checks import STATUSES, Check, Status, worst
-from mbio.primers.evaluation import PairReport, PrimerReport, evaluate_primer, pair_checks
+from mbio.primers.evaluation import (
+    PairReport,
+    PrimerReport,
+    evaluate_primer,
+    pair_checks,
+    screen_primer,
+)
 from mbio.primers.placement import Placement
 from mbio.primers.polymerase import Q5, Polymerase
 from mbio.primers.thresholds import TARGET_TM, THRESHOLDS, Thresholds
@@ -55,7 +60,8 @@ def design_primer(
     placement allows passes. Candidates rank by worst status, then by how many checks did not
     pass, then by the band a length passes on, then by the Tm nearest `target_tm`, then by
     nearness to `position`, and the shorter primer breaks a tie. `tail` joins its 5' end and
-    stays out of the binding site.
+    stays out of the binding site. The choice is the one judging every candidate whole makes,
+    but a candidate `screen_primer` already ranks below the best is never aligned.
 
     Raises
     ------
@@ -91,10 +97,18 @@ def design_primer(
     >>> design_primer(template, 0, Strand.FORWARD, placement=region).sequence
     'CGTAATCATGGTCATAGCTGTT'
     """
-    options = _options(
+    candidates = _candidates(
         template, position, strand, placement, tail, name, target_tm, polymerase, thresholds
     )
-    return min(_fitted(options, position, placement), key=lambda option: option.rank).primer
+    floors = sorted(_fitted(candidates, position, placement), key=lambda one: one.floor)
+    best = _judged(floors[0], template, target_tm, position, polymerase, thresholds)
+    for candidate in floors[1:]:
+        # In order of floor, so once a floor is no better than the best, none after it can be.
+        if candidate.floor >= best.rank:
+            break
+        judged = _judged(candidate, template, target_tm, position, polymerase, thresholds)
+        best = min(best, judged, key=lambda option: option.rank)
+    return best.primer
 
 
 def design_pair(
@@ -191,7 +205,8 @@ def ranked_pairs(
     """Yield every pair `design_pair` chooses between, best first, judged as by `evaluate_pair`.
 
     The first is the pair `design_pair` chooses. A pair is judged only once no pair still to
-    judge could rank above it, so taking the first few judges few. A pair holding a binding site
+    judge could rank above it, and a candidate is judged whole only once the search reaches it,
+    so taking the first few judges few. A pair holding a binding site
     in `exclude` is passed over, and `exclude` is read as pairs are taken: a site added to it
     between two pairs stays out of every later one.
 
@@ -219,7 +234,7 @@ def ranked_pairs(
     >>> [primer.sequence for primer in (after.forward.primer, after.reverse.primer)]
     ['GGCGTAATCATGGTCATAGC', 'TAAGGGCGAATTCCAGCAC']
     """
-    forwards = _options(
+    forwards = _candidates(
         template,
         start,
         Strand.FORWARD,
@@ -230,7 +245,7 @@ def ranked_pairs(
         polymerase,
         thresholds,
     )
-    reverses = _options(
+    reverses = _candidates(
         template,
         end,
         Strand.REVERSE,
@@ -243,11 +258,19 @@ def ranked_pairs(
     )
     _fitted(forwards, start, forward_placement)
     _fitted(reverses, end, reverse_placement)
-    for options in (forwards, reverses):
-        if all(option.site in exclude for option in options):
-            strand = options[0].site.strand.name.lower()
+    for candidates in (forwards, reverses):
+        if all(candidate.site in exclude for candidate in candidates):
+            strand = candidates[0].site.strand.name.lower()
             raise ValueError(f"every {strand} binding site is excluded")
-    return _in_rank_order(forwards, reverses, template, polymerase, thresholds, exclude)
+    by_rank = (
+        _ByRank(
+            forwards, lambda one: _judged(one, template, target_tm, start, polymerase, thresholds)
+        ),
+        _ByRank(
+            reverses, lambda one: _judged(one, template, target_tm, end, polymerase, thresholds)
+        ),
+    )
+    return _in_rank_order(*by_rank, template, polymerase, thresholds, exclude)
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,7 +287,76 @@ class _Option:
         return self.primer.binding_sites[0]
 
 
-def _options(
+@dataclass(frozen=True, slots=True)
+class _Candidate:
+    """One binding site a placement allows, ranked before it is judged whole.
+
+    `floor` is its rank on `screen_primer` alone. Judging it whole only adds verdicts, so it
+    never ranks better than that.
+    """
+
+    primer: Primer
+    five: int
+    floor: _Rank
+
+    @property
+    def site(self) -> BindingSite:
+        """Return the binding site."""
+        return self.primer.binding_sites[0]
+
+
+class _ByRank:
+    """Candidates in the order of their rank, each judged whole only when the order reaches it.
+
+    The candidates wait in order of floor. The least is judged and waits again under its rank,
+    until the least waiting is one already judged: no candidate still waiting can rank above it,
+    so it is the next in rank order.
+    """
+
+    def __init__(
+        self, candidates: list[_Candidate], judge: Callable[[_Candidate], _Option]
+    ) -> None:
+        self._judge = judge
+        self._waiting: list[tuple[_Rank, int, _Candidate | _Option]] = [
+            (candidate.floor, order, candidate) for order, candidate in enumerate(candidates)
+        ]
+        heapq.heapify(self._waiting)
+        self._ranked: list[_Option] = []
+
+    def at(self, index: int) -> _Option | None:
+        """Return the option at this place in rank order, or ``None`` past the last."""
+        while len(self._ranked) <= index and self._waiting:
+            _, order, entry = heapq.heappop(self._waiting)
+            if isinstance(entry, _Option):
+                self._ranked.append(entry)
+            else:
+                judged = self._judge(entry)
+                heapq.heappush(self._waiting, (judged.rank, order, judged))
+        return self._ranked[index] if index < len(self._ranked) else None
+
+    def run(self, status: int) -> "_Run":
+        """Return the options of one status, which follow every better one in rank order."""
+        start = 0
+        while (option := self.at(start)) is not None and option.rank[0] < status:
+            start += 1
+        return _Run(self, start, status)
+
+
+@dataclass(frozen=True, slots=True)
+class _Run:
+    """The options of one status: a stretch of a rank order, read as far as it is asked."""
+
+    order: _ByRank
+    start: int
+    status: int
+
+    def at(self, index: int) -> _Option | None:
+        """Return the option at this place in the run, or ``None`` past its end."""
+        option = self.order.at(self.start + index)
+        return option if option is not None and option.rank[0] == self.status else None
+
+
+def _candidates(
     template: SequenceRecord,
     position: int,
     strand: Strand,
@@ -274,17 +366,34 @@ def _options(
     target_tm: float,
     polymerase: Polymerase,
     thresholds: Thresholds,
-) -> list[_Option]:
-    """Return every binding site the placement allows, each judged whole and ranked."""
-    options = []
+) -> list[_Candidate]:
+    """Return every binding site the placement allows, each ranked on what needs no alignment."""
+    candidates = []
     for site in _sites(template, position, strand, placement, thresholds):
         bases = template.bases(site.start, site.end)
         sequence = bases if strand is Strand.FORWARD else reverse_complement(bases)
         primer = Primer(name, tail + sequence, binding_sites=(site,))
-        report = evaluate_primer(primer, template, polymerase=polymerase, thresholds=thresholds)
         five = site.start if strand is Strand.FORWARD else site.end
-        options.append(_Option(primer, report, _rank(report, target_tm, five, position, template)))
-    return options
+        screened = PrimerReport(
+            primer, screen_primer(primer, polymerase=polymerase, thresholds=thresholds)
+        )
+        floor = _rank(screened, target_tm, five, position, template)
+        candidates.append(_Candidate(primer, five, floor))
+    return candidates
+
+
+def _judged(
+    candidate: _Candidate,
+    template: SequenceRecord,
+    target_tm: float,
+    position: int,
+    polymerase: Polymerase,
+    thresholds: Thresholds,
+) -> _Option:
+    """Return a candidate judged whole by `evaluate_primer`, and ranked on that."""
+    primer = candidate.primer
+    report = evaluate_primer(primer, template, polymerase=polymerase, thresholds=thresholds)
+    return _Option(primer, report, _rank(report, target_tm, candidate.five, position, template))
 
 
 def _sites(
@@ -327,14 +436,16 @@ def _positions(span: Segment | None) -> list[int]:
     return [] if span is None else list(range(span.start, span.end))
 
 
-def _fitted(options: list[_Option], position: int, placement: Placement | None) -> list[_Option]:
-    """Return the options, refusing a position or a placement holding no annealing region."""
-    if not options:
+def _fitted(
+    candidates: list[_Candidate], position: int, placement: Placement | None
+) -> list[_Candidate]:
+    """Return the candidates, refusing a position or a placement holding no annealing region."""
+    if not candidates:
         where = (
             f"this template at {position}" if placement is None else f"this placement: {placement}"
         )
         raise ValueError(f"no annealing region fits {where}")
-    return options
+    return candidates
 
 
 def _rank(
@@ -360,8 +471,8 @@ def _apart(position: int, wanted: int, template: SequenceRecord) -> int:
 
 
 def _in_rank_order(
-    forwards: list[_Option],
-    reverses: list[_Option],
+    forwards: _ByRank,
+    reverses: _ByRank,
     template: SequenceRecord,
     polymerase: Polymerase,
     thresholds: Thresholds,
@@ -374,7 +485,7 @@ def _in_rank_order(
     while a pair is yielded, so it is read after every yield.
     """
     judged: list[_Judged] = []
-    pairs = _by_bound(_ranked(forwards), _ranked(reverses))
+    pairs = _by_bound(forwards, reverses)
     for order, (bound, forward, reverse) in enumerate(pairs):
         yield from _taken(judged, bound, polymerase, exclude)
         if _excluded(forward, reverse, exclude):
@@ -433,43 +544,45 @@ def _pair_rank(
     )
 
 
-def _ranked(options: list[_Option]) -> list[_Option]:
-    """Return the options in ranked order, which is the order a pair search walks them in."""
-    return sorted(options, key=lambda option: option.rank)
+def _by_bound(forwards: _ByRank, reverses: _ByRank) -> Iterator[tuple[_PairRank, _Option, _Option]]:
+    """Yield every pair of options, lowest bound first, judging none of the pairs.
+
+    A bound leads with the worse status of its pair, so every pair of one worse status comes
+    before any of the next, and the runs of a status are read only once the search reaches it.
+    """
+    statuses = range(len(STATUSES))
+    for worse in statuses:
+        runs = [
+            (forwards.run(one), reverses.run(other))
+            for one in statuses
+            for other in statuses
+            if max(one, other) == worse
+        ]
+        groups = [_summed(*pair) for pair in runs if all(run.at(0) is not None for run in pair)]
+        yield from heapq.merge(*groups, key=lambda entry: entry[0])
 
 
-def _by_bound(
-    forwards: list[_Option], reverses: list[_Option]
-) -> Iterator[tuple[_PairRank, _Option, _Option]]:
-    """Yield every pair of ranked options, lowest bound first, judging none of them."""
-    groups = [
-        _summed(ones, others) for ones in _by_status(forwards) for others in _by_status(reverses)
-    ]
-    return heapq.merge(*groups, key=lambda entry: entry[0])
-
-
-def _by_status(options: list[_Option]) -> list[list[_Option]]:
-    """Split ranked options into runs of one status, inside which the rest of a rank rises."""
-    return [list(group) for _, group in groupby(options, key=lambda option: option.rank[0])]
-
-
-def _summed(
-    forwards: list[_Option], reverses: list[_Option]
-) -> Iterator[tuple[_PairRank, _Option, _Option]]:
+def _summed(forwards: _Run, reverses: _Run) -> Iterator[tuple[_PairRank, _Option, _Option]]:
     """Yield pairs of one status each, in rising order of their bound.
 
     The bounds of a run rise with either index, so the next pair is always a step from one
     already taken: the walk of a sorted matrix, and it reaches the far corner only if asked.
     """
-    heap = [(_bound(forwards[0], reverses[0]), 0, 0)]
-    seen = {(0, 0)}
+    heap: list[tuple[_PairRank, int, int, _Option, _Option]] = []
+    seen: set[tuple[int, int]] = set()
+
+    def reach(one: int, other: int) -> None:
+        forward, reverse = forwards.at(one), reverses.at(other)
+        if forward is not None and reverse is not None and (one, other) not in seen:
+            seen.add((one, other))
+            heapq.heappush(heap, (_bound(forward, reverse), one, other, forward, reverse))
+
+    reach(0, 0)
     while heap:
-        bound, one, other = heapq.heappop(heap)
-        yield bound, forwards[one], reverses[other]
-        for step in ((one + 1, other), (one, other + 1)):
-            if step[0] < len(forwards) and step[1] < len(reverses) and step not in seen:
-                seen.add(step)
-                heapq.heappush(heap, (_bound(forwards[step[0]], reverses[step[1]]), *step))
+        bound, one, other, forward, reverse = heapq.heappop(heap)
+        yield bound, forward, reverse
+        reach(one + 1, other)
+        reach(one, other + 1)
 
 
 def _bound(forward: _Option, reverse: _Option) -> _PairRank:

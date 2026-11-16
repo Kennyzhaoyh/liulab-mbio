@@ -196,6 +196,18 @@ def _perfect_stability(dna: str) -> float:
     return primer3.calc_end_stability(dna, reverse_complement(dna)).tm
 
 
+@lru_cache(maxsize=1 << 15)
+def _annealed_stability(dna: str, annealed: str) -> float:
+    """Return the end stability of a sequence annealed to bases it mismatches somewhere.
+
+    Plans on one template test the same candidates against the same places again, so the value
+    is remembered: it depends on the two sequences alone.
+    """
+    import primer3
+
+    return primer3.calc_end_stability(dna, annealed).tm
+
+
 @lru_cache(maxsize=1 << 12)
 def _priming_sites(
     dna: str, sequence: str, topology: Topology, thresholds: Thresholds
@@ -258,8 +270,6 @@ def _primed(
     """Return those annealing places melting within the margin of a perfect match."""
     if not annealings:
         return ()
-    import primer3
-
     perfect = _perfect_stability(dna)
     floor = perfect - thresholds.off_target_margin
     found = []
@@ -268,7 +278,7 @@ def _primed(
         if mismatches:
             here = template.bases(site.start, site.end)
             annealed = here if site.strand is Strand.REVERSE else reverse_complement(here)
-            tm = primer3.calc_end_stability(dna, annealed).tm
+            tm = _annealed_stability(dna, annealed)
         else:
             tm = perfect
         if tm >= floor:
