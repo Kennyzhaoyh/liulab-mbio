@@ -87,7 +87,6 @@ def one_run(out: Path):
     return whole(read_project(out / "protocol" / "project.json"))
 
 
-@pytest.mark.slow
 def test_one_command_plans_the_library_and_prints_the_paths(build, tmp_path):
     out = tmp_path / "library"
 
@@ -145,7 +144,6 @@ def test_one_command_plans_the_library_and_prints_the_paths(build, tmp_path):
     assert bill.currency == "USD"
 
 
-@pytest.mark.slow
 def test_a_working_vector_carrying_no_cassette_is_planned_from_the_site_named(tmp_path):
     """The build names the backbone; only the command line says where its cassette goes.
 

@@ -55,7 +55,6 @@ def test_a_build_with_no_working_vector_designs_no_final_pair(pairs):
     assert len(pairs.designed) == 2
 
 
-@pytest.mark.slow
 def test_the_final_pair_keeps_the_forward_anchor_and_moves_the_reverse_one(plan):
     """The reverse anchor was in the library backbone, which the move leaves behind."""
     stock = SequenceRecord("ACGATCGTTA" * 20, topology="circular", name="pWORK")

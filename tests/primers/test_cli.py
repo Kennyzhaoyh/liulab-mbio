@@ -65,7 +65,6 @@ def test_the_command_writes_the_sheet_for_a_pair_on_a_record(
     assert rows[2].split("\t")[1].startswith("GGTCTCT")
 
 
-@pytest.mark.slow
 def test_the_command_writes_the_genome_report_beside_the_sheet(
     genome: Path, tmp_path: Path
 ) -> None:
