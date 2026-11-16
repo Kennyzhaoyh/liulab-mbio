@@ -126,22 +126,24 @@ temporary files. `reference_docs/README.md` says how.
 `pixi run check` must be green before you commit: `lint` and `fmt-check` (ruff), `typecheck`
 (pyright, `standard`, plus annotated parameters outside `tests/`), `vale` and `markdownlint`,
 `conformance`, and `test`. It reports **all** failures — read to the bottom before fixing
-anything. The docs build is not part of it and runs as its own CI job.
+anything. The docs build is a separate CI step.
 
-Work on a branch and merge through a pull request.
+Merge through a pull request: CI runs only there, on the merge commit.
+
+`timeout` caps one test and `suite_budget` a run without slow tests, set in
+`[tool.pytest.ini_options]` only. A `slow` test skips both, and runs in `pixi run test-slow`.
 
 Four traps:
 
 - **`--doctest-modules` runs every `Examples` block in `src/` as a test.** An example that
-  downloads, shells out or needs a large file wants `# doctest: +SKIP`, and the marker covers
-  only the line it sits on.
+  downloads, shells out or reads a large file wants `# doctest: +SKIP` on each such line.
 - **`filterwarnings = ["error"]`.** Each tolerated warning gets a targeted entry in
   `pyproject.toml` with a comment saying why. Never a blanket ignore.
-- **`src/` is collected**, so every module is imported at test time. Keep a heavy import inside
-  the method body that needs it, not at module scope.
+- **`src/` is collected**, so every module is imported at test time: keep a heavy import inside
+  the function that needs it.
 - **A substring of `--help` output is not a substring of the help.** Typer prints it through
-  rich, which styles the first dash of an option on its own. Colour is off under `ssh` and on in
-  CI; reproduce CI with `FORCE_COLOR=1`, and strip the styling before you assert.
+  rich, which styles an option's first dash on its own, in CI but not under `ssh`. Reproduce CI
+  with `FORCE_COLOR=1`, and strip the styling before you assert.
 
 ## Writing rules
 

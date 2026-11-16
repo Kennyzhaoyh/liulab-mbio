@@ -284,6 +284,15 @@ sets one.
 
 ### Changed
 
+- Tests now have time limits: 2 seconds for any one test and 45 seconds for the whole run,
+  set in `pyproject.toml`. A test marked `slow` is exempt from both and runs only with
+  `pixi run test-slow`. `pixi run check` now runs the tests even when an earlier step fails,
+  so one run reports every failure. CI is one job that runs only on pull requests that are not
+  drafts, and no longer runs again after a merge to `main`.
+- Primer design is much faster, and still chooses the same primers. A candidate is checked for
+  hairpins, dimers and binding elsewhere only while it could still be the one chosen, and a
+  pair checked once is not checked again. Every plan that designs primers gains, the library
+  plans most.
 - Every bench page the package writes now reads the same way, whichever method wrote it. Its steps
   sit in named groups, so a reader sees the shape of the job before the first step, and the
   numbering still runs straight through. A note, a caution and a troubleshooting row each carry

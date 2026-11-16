@@ -54,8 +54,10 @@ Every fixed bug keeps its test, at the lowest level that still reproduces the bu
 
 ## Time
 
-pytest on CI has a budget of 30 s. No gate enforces it: runner speed varies, and a time gate
-would fail a correct pull request. The suite runs in parallel workers, a file at a time each,
+A run has 45 s and one test 2 s, its fixtures' setup included: `suite_budget` and `timeout` in
+`pyproject.toml` enforce both. A shared fixture's build counts against the first test that asks
+for it. A test over the limit gets a cheaper fixture, or is marked `slow` with its reason, and
+`pixi run test-slow` runs it. The suite runs in parallel workers, a file at a time each,
 set in pytest's own options so the laptop and CI run alike. Over budget, trim by the rules
 above, or make a plan's first design cheaper: every worker rebuilds the caches
 `primers.placement` fills, so adding workers buys less than it looks.

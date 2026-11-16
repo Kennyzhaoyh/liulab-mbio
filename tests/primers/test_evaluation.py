@@ -11,6 +11,7 @@ from mbio.primers import (
     evaluate_primer,
     melting_temperature,
 )
+from mbio.primers.evaluation import screen_primer
 from mbio.sequence import BindingSite, Primer, SequenceRecord, Strand, reverse_complement
 
 from .sequences import M13_FWD, M13_REV, MCS_FWD, PUC_FWD, PUC_REV
@@ -42,6 +43,20 @@ def test_a_tail_raises_the_full_primer_tm_and_leaves_the_annealing_region_alone(
     assert report["length"].status == "pass"
     assert report["tm"].value == pytest.approx(melting_temperature(MCS_FWD))
     assert report["tm_full"].value > report["tm"].value + 5
+
+
+def test_a_screen_is_the_report_s_opening_checks_so_a_design_may_rank_on_it(puc19) -> None:
+    # A design ranks a candidate on the screen before it judges it whole, which picks the same
+    # primer only while the rest of the report adds checks and changes none of these.
+    tailed = Primer(
+        "MCS fwd",
+        "TTGGTCTCA" + MCS_FWD,
+        binding_sites=(BindingSite(452, 452 + len(MCS_FWD), Strand.FORWARD),),
+    )
+    screened = screen_primer(tailed)
+    whole = evaluate_primer(tailed, puc19).checks
+    assert screened == whole[: len(screened)]
+    assert {check.name for check in whole[len(screened) :]} >= {"hairpin", "off_target"}
 
 
 def test_a_check_no_sourced_threshold_judges_carries_no_verdict() -> None:

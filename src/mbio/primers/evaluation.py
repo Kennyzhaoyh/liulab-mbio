@@ -92,6 +92,42 @@ def evaluate_primer(
     return PrimerReport(primer, checks)
 
 
+def screen_primer(
+    primer: Primer, *, polymerase: Polymerase = Q5, thresholds: Thresholds = THRESHOLDS
+) -> tuple[Check, ...]:
+    """Return the checks `evaluate_primer` opens its report with, which cost no alignment.
+
+    Length, GC, GC clamp, Tm, the full-primer Tm, the 3'-end stability, runs and repeats, judged
+    as `evaluate_primer` judges them, on the annealing region its binding site covers. The rest
+    of a report can only add verdicts, so a design ranks a candidate on these first and judges
+    it whole only when it could still be chosen.
+
+    Examples
+    --------
+    >>> [check.name for check in screen_primer(Primer("M13 fwd", "GTAAAACGACGGCCAGT"))][:3]
+    ['length', 'gc_percent', 'gc_clamp']
+    """
+    sequence, sites = primer.sequence, primer.binding_sites
+    annealing = sequence[-max(site.end - site.start for site in sites) :] if sites else sequence
+    return _sequence_checks(sequence, annealing, polymerase, thresholds)
+
+
+def _sequence_checks(
+    sequence: str, annealing: str, polymerase: Polymerase, thresholds: Thresholds
+) -> tuple[Check, ...]:
+    return (
+        *annealing_checks(annealing, polymerase=polymerase, thresholds=thresholds),
+        Check("tm_full", None, melting_temperature(sequence, polymerase)),
+        Check("end_stability", None, _end_stability(annealing)),
+        _run_check(sequence, thresholds),
+        _graded(
+            "dinucleotide_repeat",
+            _longest_dinucleotide_repeat(sequence),
+            thresholds.dinucleotide_repeat,
+        ),
+    )
+
+
 @lru_cache(maxsize=1 << 13)
 def _checks(
     sequence: str,
@@ -113,15 +149,7 @@ def _checks(
     thermo, note = _thermo_sequence(sequence)
     hairpin, self_dimer, anchored_dimer = _structure_tms(thermo)
     checks = (
-        *annealing_checks(annealing, polymerase=polymerase, thresholds=thresholds),
-        Check("tm_full", None, melting_temperature(sequence, polymerase)),
-        Check("end_stability", None, _end_stability(annealing)),
-        _run_check(sequence, thresholds),
-        _graded(
-            "dinucleotide_repeat",
-            _longest_dinucleotide_repeat(sequence),
-            thresholds.dinucleotide_repeat,
-        ),
+        *_sequence_checks(sequence, annealing, polymerase, thresholds),
         _graded("hairpin", hairpin, thresholds.hairpin, note),
         _graded("self_dimer", self_dimer, thresholds.dimer, note),
         _graded("self_dimer_3prime", anchored_dimer, thresholds.dimer_3prime, note),
@@ -257,22 +285,15 @@ def pair_checks(
     the pair makes exactly one product. `evaluate_pair` is the whole judgement; a design that
     has judged each primer already calls this.
     """
-    import primer3
-
     primers = (forward.primer, reverse.primer)
     tms = (forward["tm"].value, reverse["tm"].value)
     first, second = (_thermo_sequence(primer.sequence) for primer in primers)
     note = first[1] or second[1]
-    anchored = max(
-        primer3.calc_end_stability(first[0], second[0]).tm,
-        primer3.calc_end_stability(second[0], first[0]).tm,
-    )
+    heterodimer, anchored = _pair_tms(first[0], second[0])
     products = amplicon_sizes(*primers, template, thresholds=thresholds)
     return (
         _graded("tm_difference", abs(tms[0] - tms[1]), thresholds.tm_difference),
-        _graded(
-            "heterodimer", primer3.calc_heterodimer(first[0], second[0]).tm, thresholds.dimer, note
-        ),
+        _graded("heterodimer", heterodimer, thresholds.dimer, note),
         _graded("heterodimer_3prime", anchored, thresholds.dimer_3prime, note),
         _graded(
             "products",
@@ -343,6 +364,24 @@ def _structure_tms(sequence: str) -> tuple[float, float, float]:
         primer3.calc_hairpin(sequence).tm,
         primer3.calc_homodimer(sequence).tm,
         primer3.calc_end_stability(sequence, sequence).tm,
+    )
+
+
+@lru_cache(maxsize=1 << 15)
+def _pair_tms(first: str, second: str) -> tuple[float, float]:
+    """Return the heterodimer and 3'-anchored heterodimer Tms of two sequences, °C.
+
+    Every plan that designs on the same template judges the same pairs again, so these are
+    remembered: each depends on nothing but the two sequences.
+    """
+    import primer3
+
+    return (
+        primer3.calc_heterodimer(first, second).tm,
+        max(
+            primer3.calc_end_stability(first, second).tm,
+            primer3.calc_end_stability(second, first).tm,
+        ),
     )
 
 
