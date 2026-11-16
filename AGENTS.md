@@ -130,8 +130,8 @@ anything. The docs build is a separate CI step.
 
 Merge through a pull request: CI runs only there, on the merge commit.
 
-`timeout` caps one test and `suite_budget` the run, both set in `[tool.pytest.ini_options]` only.
-A test marked `slow` skips both, and runs in `pixi run test-slow`.
+`timeout` caps one test and `suite_budget` a run without slow tests, set in
+`[tool.pytest.ini_options]` only. A `slow` test skips both, and runs in `pixi run test-slow`.
 
 Four traps:
 

@@ -82,7 +82,7 @@ pyyaml = "*"
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
-# The suite is past the 30 s budget in `docs/agents/testing.md` on one core, so it runs in
+# The suite is past its `suite_budget` on one core, so it runs in
 # parallel workers. pytest's own settings hold the options; see `addopts` below.
 pytest-xdist = "*"
 pytest-timeout = "*"
