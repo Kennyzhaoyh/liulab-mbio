@@ -156,6 +156,23 @@ def test_design_refuses_a_position_a_linear_template_cannot_hold() -> None:
         design_primer(template, 38, Strand.FORWARD)
 
 
+def test_a_length_band_past_what_primer3_aligns_is_refused_by_every_design_call() -> None:
+    # The copy of the first 75 bases differs at one base, so a candidate at 0 also primes there:
+    # judged, one longer than 60 nt would ask primer3 for an alignment it refuses.
+    head = "CAGATTTTCATATTATGCAGAAAATCTACTTCGCCTGATACGAGTCGGTTATCTTCGGATACTGTATAGTCCCAC"
+    spacer = "CTGGTGATCCTATGCTTGTGAGTACCCAGAAAATAGCGACGGACCGCGGTGTTAAGTGTC"
+    template = SequenceRecord(head + spacer + head[:10] + "C" + head[11:] + spacer)
+    wide = dataclasses.replace(THRESHOLDS, length=Band(18, 30, 15, 70))
+    refused = "at most 60 nt, and the length band allows 70 nt"
+    with pytest.raises(ValueError, match=refused):
+        design_primer(template, 0, Strand.FORWARD, thresholds=wide)
+    with pytest.raises(ValueError, match=refused):
+        design_pair(template, 0, len(template), thresholds=wide)
+    # On the call, before the first pair is taken.
+    with pytest.raises(ValueError, match=refused):
+        ranked_pairs(template, 0, len(template), thresholds=wide)
+
+
 def test_an_anchored_placement_chooses_what_a_bare_position_does(puc19) -> None:
     anchored = Placement(five_prime=Segment(452, 453))
     primer = design_primer(puc19, 452, Strand.FORWARD, placement=anchored)

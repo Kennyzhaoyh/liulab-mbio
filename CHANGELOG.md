@@ -392,6 +392,10 @@ sets one.
 
 ### Fixed
 
+- A primer design whose length band allows an annealing region over 60 nt, the longest primer3
+  aligns, is refused at the call with an error naming the band. `design_primer`, `design_pair`
+  and `ranked_pairs` all refuse it the same way. Before, such a design could end in a primer3
+  error partway through, or return a primer whose longest candidates were never judged.
 - Drawing a map into a directory that is not there makes it, as every verb taking an output
   directory already did. `mbio plot map RECORD -o figures/map.pdf` used to end in a traceback.
 - No Gateway clone is drawn with the site it no longer carries. The piece that moves brings the
