@@ -531,21 +531,51 @@ def primer_tail(
     >>> primer_tail("BsaI", "AATG")
     'AAACACGGTCTCAAATG'
     """
-    one = _resolve(enzyme)[0]
-    overhang = overhang.upper()
-    _check_overhang(one, overhang)
-    active = (one, *_resolve(avoid))
-    site = _definite(one)
-    filler = _search(
-        max(0, one.top_cut - len(site)), lambda bases: site + bases + overhang, active, one
+    tail, refused = _tail(
+        _resolve(enzyme)[0],
+        overhang.upper(),
+        None if spacer is None else spacer.upper(),
+        spacer_length,
+        _resolve(avoid),
     )
-    core = site + filler + overhang
-    if spacer is None:
-        return _search(spacer_length, lambda bases: bases + core, active, one) + core
-    spacer = spacer.upper()
-    if (reason := _problem(spacer + core, active, one)) is not None:
-        raise ValueError(f"spacer {spacer!r} cannot be used: {reason}")
-    return spacer + core
+    if refused is not None:
+        raise ValueError(refused)
+    return tail
+
+
+@cache
+def _tail(
+    enzyme: Enzyme,
+    overhang: str,
+    spacer: str | None,
+    spacer_length: int,
+    avoid: tuple[Enzyme, ...],
+) -> tuple[str, str | None]:
+    """The tail these arguments ask for, or why there is none.
+
+    Cached, because choosing the fillers searches base by base and a caller weighing overhangs
+    asks for the same few tails over and over. The tail follows from the arguments alone, and
+    the refusal is cached beside it: a caller sifting candidates is refused far more often than
+    it is served.
+    """
+    try:
+        _check_overhang(enzyme, overhang)
+        active = (enzyme, *avoid)
+        site = _definite(enzyme)
+        filler = _search(
+            max(0, enzyme.top_cut - len(site)),
+            lambda bases: site + bases + overhang,
+            active,
+            enzyme,
+        )
+        core = site + filler + overhang
+        if spacer is None:
+            return _search(spacer_length, lambda bases: bases + core, active, enzyme) + core, None
+        if (reason := _problem(spacer + core, active, enzyme)) is not None:
+            return "", f"spacer {spacer!r} cannot be used: {reason}"
+        return spacer + core, None
+    except ValueError as refused:
+        return "", str(refused)
 
 
 def _check_overhang(enzyme: Enzyme, overhang: str) -> None:
