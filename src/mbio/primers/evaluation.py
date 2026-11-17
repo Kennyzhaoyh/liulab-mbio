@@ -11,6 +11,8 @@ from functools import lru_cache
 
 from mbio.checks import Check, Status, worst, worst_of
 from mbio.primers.placement import (
+    _THERMO_MAX,
+    _THERMO_NOTE,
     amplicon_sizes,
     find_binding_sites,
     find_off_target_sites,
@@ -18,9 +20,6 @@ from mbio.primers.placement import (
 from mbio.primers.polymerase import Q5, Polymerase, melting_temperature
 from mbio.primers.thresholds import THRESHOLDS, Band, Thresholds
 from mbio.sequence import BindingSite, Primer, SequenceRecord, Topology
-
-#: primer3 refuses a thermodynamic alignment on anything longer.
-_THERMO_MAX = 60
 
 #: SantaLucia (1998) nearest-neighbour ΔG°37, kcal/mol.
 _NEAREST_NEIGHBOUR_DG = {
@@ -77,9 +76,10 @@ def evaluate_primer(
 
     The annealing region is the 3' part its binding site covers; a primer carrying none is
     placed on the template by `find_binding_sites`, and judged whole without one. Length, GC
-    and Tm are of the annealing region, runs and structures of the whole primer. A primer
-    longer than primer3 will align is judged on its 3'-terminal bases. The full-primer Tm and
-    the 3'-end stability are reported without a verdict.
+    and Tm are of the annealing region, runs and structures of the whole primer. primer3
+    aligns at most 60 nt, so past that the structures are judged on the primer's 3'-terminal
+    60 bases, and the off-target sites on the annealing region's, and each such check says so.
+    The full-primer Tm and the 3'-end stability are reported without a verdict.
 
     Examples
     --------
@@ -311,11 +311,14 @@ def _template_checks(
     template: SequenceRecord,
     thresholds: Thresholds,
 ) -> tuple[Check, ...]:
-    elsewhere = find_off_target_sites(annealing, template, sites, thresholds=thresholds)
-    detail = ", ".join(
+    # A site is matched to its placement by its 3' end, which trimming the 5' side leaves put.
+    thermo, note = _thermo_sequence(annealing)
+    elsewhere = find_off_target_sites(thermo, template, sites, thresholds=thresholds)
+    listed = ", ".join(
         f"{site.site.start} {site.site.strand.name.lower()}, {site.mismatches} mismatched"
         for site in elsewhere
     )
+    detail = "; ".join(part for part in (listed, note) if part)
     return (
         _graded("binding_sites", len(sites), thresholds.binding_sites),
         _graded("off_target", len(elsewhere), thresholds.off_target, detail),
@@ -348,7 +351,7 @@ def _run_check(sequence: str, thresholds: Thresholds) -> Check:
 def _thermo_sequence(sequence: str) -> tuple[str, str]:
     if len(sequence) <= _THERMO_MAX:
         return sequence, ""
-    return sequence[-_THERMO_MAX:], f"judged on the 3'-terminal {_THERMO_MAX} bases"
+    return sequence[-_THERMO_MAX:], _THERMO_NOTE
 
 
 @lru_cache(maxsize=1 << 15)

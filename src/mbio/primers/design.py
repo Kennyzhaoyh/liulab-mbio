@@ -7,14 +7,13 @@ from dataclasses import dataclass
 
 from mbio.checks import STATUSES, Check, Status, worst
 from mbio.primers.evaluation import (
-    _THERMO_MAX,
     PairReport,
     PrimerReport,
     evaluate_primer,
     pair_checks,
     screen_primer,
 )
-from mbio.primers.placement import Placement
+from mbio.primers.placement import _THERMO_MAX, Placement
 from mbio.primers.polymerase import Q5, Polymerase
 from mbio.primers.thresholds import TARGET_TM, THRESHOLDS, Thresholds
 from mbio.sequence import (
