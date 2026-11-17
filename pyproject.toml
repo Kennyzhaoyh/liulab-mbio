@@ -227,9 +227,6 @@ addopts = [
     # `primers.placement` remembers per template, are then built once for the file rather than
     # once per test that lands elsewhere.
     "--dist=loadfile",
-    # Temporary, for one CI run of #601: the slowest tests, setup and call apart.
-    "--durations=25",
-    "--durations-min=0.2",
 ]
 xfail_strict = true
 filterwarnings = ["error"]
