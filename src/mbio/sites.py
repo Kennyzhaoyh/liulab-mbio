@@ -551,7 +551,7 @@ def _tail(
     spacer_length: int,
     avoid: tuple[Enzyme, ...],
 ) -> tuple[str, str | None]:
-    """The tail these arguments ask for, or why there is none.
+    """Build the tail these arguments ask for, or say why there is none.
 
     Cached, because choosing the fillers searches base by base and a caller weighing overhangs
     asks for the same few tails over and over. The tail follows from the arguments alone, and
