@@ -23,16 +23,15 @@ def _run(*arguments: str) -> tuple[int, list[str]]:
 def rastered(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, float]]:
     """Record the path and dpi of every PNG handed to molviz, and raster none of them.
 
-    Rastering an SVG starts a converter that costs far more than the drawing, and what it makes
-    of the dpi is molviz's own promise and molviz's own tests. What this file checks is the
-    handover: the path the command asks for, and the dpi it passes on.
+    What a converter makes of a dpi is molviz's own promise, and molviz's own tests. What this
+    file checks is the handover: the path the command asks for, and the dpi it passes on.
     """
     import molviz
 
     rastered: list[tuple[Path, float]] = []
     write = molviz.Drawing.write
 
-    def spy(self: molviz.Drawing, path: Path, dpi: float = 300) -> None:
+    def spy(self: molviz.Drawing, path: Path, dpi: float) -> None:
         if Path(path).suffix.lower() == ".png":
             rastered.append((Path(path), dpi))
             return
@@ -71,7 +70,7 @@ def test_one_run_hands_molviz_every_option_and_writes_each_file_asked_for(
         "bases_per_row": 30,
     }
     assert re.search(r'<svg[^>]* width="[\d.]+"', outs[1].read_text(encoding="utf-8")) is not None
-    assert [path.is_file() and bool(path.read_bytes()) for path in outs[:2]] == [True, True]
+    assert all(path.read_bytes() for path in outs[:2])
     # The PNG is the one output a converter rasters, so what is checked here is the handover.
     assert rastered == [(outs[2], 18)]
 

@@ -156,7 +156,9 @@ def test_no_shipped_pipeline_writes_two_steps_under_one_key(
         f"{pipeline}: {protocol.title}": Counter(step.key for step in protocol.steps)
         for protocol in shipped(pipeline)
     }
-    # Every protocol holds steps, so nothing here can pass by having found none to count.
+    # Every protocol holds steps and is counted under a key of its own, so nothing here can
+    # pass by having found none to count or by two protocols collapsing into one entry.
+    assert len(counted) == len(shipped(pipeline))
     assert all(counted.values())
     assert not {
         where: sorted(key for key, seen in keys.items() if seen > 1)

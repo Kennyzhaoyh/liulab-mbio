@@ -286,8 +286,8 @@ sets one.
 
 - Planning a library is faster, and plans the same library. A plan designs its read-back primer
   pairs once rather than on every ask, a primer tail is built once an argument set, and the
-  residue a junction shares with its host's codons is read once. The tests that plan a whole
-  run are faster with it.
+  residue a junction shares with its host's codons is read once. Every library plan gains, and
+  one writing its files or reading its chain twice gains most.
 - Tests now have time limits: 2 seconds for any one test and 45 seconds for the whole run,
   set in `pyproject.toml`. A test marked `slow` is exempt from both and runs only with
   `pixi run test-slow`. `pixi run check` now runs the tests even when an earlier step fails,

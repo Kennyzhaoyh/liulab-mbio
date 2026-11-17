@@ -277,8 +277,7 @@ class LibraryPlan:
     pool: PoolPlan | None = None
     working: Working | None = None
     seated: SeatedParts | None = None
-    # Where `reads` keeps its one design. A list and not an attribute because the plan is
-    # frozen, and out of `__init__`, `repr` and `==` because it holds no choice of the build's.
+    # Where `reads` keeps its one design: `slots=True` leaves no room for a `cached_property`.
     _designed: list[ReadPairs] = field(default_factory=list, init=False, repr=False, compare=False)
 
     @property
@@ -309,8 +308,7 @@ class LibraryPlan:
         """The pairs that read this library back, designed against the records it simulated.
 
         Designed when first asked for, and once a plan: the pairs follow from the plan, which
-        cannot change, and designing them is the most expensive thing a plan does after being
-        made.
+        cannot change.
         """
         if not self._designed:
             self._designed.append(read_pairs(self.scheme, self.rounds, self.working))

@@ -553,10 +553,8 @@ def _tail(
 ) -> tuple[str, str | None]:
     """Build the tail these arguments ask for, or say why there is none.
 
-    Cached, because choosing the fillers searches base by base and a caller weighing overhangs
-    asks for the same few tails over and over. The tail follows from the arguments alone, and
-    the refusal is cached beside it: a caller sifting candidates is refused far more often than
-    it is served.
+    The tail follows from the arguments alone, so it is cached, and the refusal is cached
+    beside it: a caller weighing overhang candidates is refused as often as it is served.
     """
     try:
         _check_overhang(enzyme, overhang)

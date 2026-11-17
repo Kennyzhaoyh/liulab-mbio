@@ -325,18 +325,17 @@ def test_the_finished_library_is_read_for_linkage_and_for_representation(protoco
 
 def test_a_build_may_state_the_four_numbers_the_method_leaves_open(pooled):
     """Stated, each prints as this run's own and its hole goes; stated nowhere, the hole stands."""
-    made = pooled
     stated = dataclasses.replace(
-        made,
+        pooled,
         build=dataclasses.replace(
-            made.build,
+            pooled.build,
             linkage_fidelity=0.9,
             final_assembly=FinalAssembly(75.0),
             pcr1_cycles=16,
             pcr2_cycles=18,
         ),
     )
-    before, after = whole(made.chain()), whole(stated.chain())
+    before, after = whole(pooled.chain()), whole(stated.chain())
     said = " ".join(
         text
         for step in after.steps
