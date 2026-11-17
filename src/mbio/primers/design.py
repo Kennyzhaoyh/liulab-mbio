@@ -68,8 +68,9 @@ def design_primer(
     ------
     ValueError
         If no annealing region fits the template there, or fits the placement, or if
-        `Thresholds.length` lets a candidate run past the 60 nt primer3 aligns. Such a band is
-        refused whole, never cut short, so a design tries every length it was given.
+        `Thresholds.length` allows one longer than the 60 nt primer3 aligns, on any template.
+        Such a band is refused whole, never cut short, so a design tries every length it was
+        given.
 
     Examples
     --------
@@ -371,14 +372,11 @@ def _candidates(
     polymerase: Polymerase,
     thresholds: Thresholds,
 ) -> list[_Candidate]:
-    """Return every binding site the placement allows, each ranked on what needs no alignment.
-
-    A band allowing a site longer than primer3 aligns is refused here, before any is judged.
-    """
-    if _longest(thresholds) > _THERMO_MAX:
+    """Return every binding site the placement allows, each ranked on what needs no alignment."""
+    if (longest := _longest(thresholds)) > _THERMO_MAX:
         raise ValueError(
-            f"primer3 aligns at most {_THERMO_MAX} nt, and this length band allows "
-            f"{_longest(thresholds)}: {thresholds.length}"
+            f"primer3 aligns an annealing region of at most {_THERMO_MAX} nt, and the length "
+            f"band allows {longest} nt"
         )
     candidates = []
     for site in _sites(template, position, strand, placement, thresholds):

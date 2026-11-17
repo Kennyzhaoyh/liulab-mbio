@@ -157,13 +157,13 @@ def test_design_refuses_a_position_a_linear_template_cannot_hold() -> None:
 
 
 def test_a_length_band_past_what_primer3_aligns_is_refused_by_every_design_call() -> None:
-    # The copy of the first 75 bases differs at one base, so a candidate at 0 also primes there,
-    # and primer3 cannot align one longer than 60 nt against it.
+    # The copy of the first 75 bases differs at one base, so a candidate at 0 also primes there:
+    # judged, one longer than 60 nt would ask primer3 for an alignment it refuses.
     head = "CAGATTTTCATATTATGCAGAAAATCTACTTCGCCTGATACGAGTCGGTTATCTTCGGATACTGTATAGTCCCAC"
     spacer = "CTGGTGATCCTATGCTTGTGAGTACCCAGAAAATAGCGACGGACCGCGGTGTTAAGTGTC"
     template = SequenceRecord(head + spacer + head[:10] + "C" + head[11:] + spacer)
     wide = dataclasses.replace(THRESHOLDS, length=Band(18, 30, 15, 70))
-    refused = r"60 nt.*Band\(low=18, high=30, warn_low=15, warn_high=70"
+    refused = "at most 60 nt, and the length band allows 70 nt"
     with pytest.raises(ValueError, match=refused):
         design_primer(template, 0, Strand.FORWARD, thresholds=wide)
     with pytest.raises(ValueError, match=refused):
