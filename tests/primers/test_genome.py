@@ -185,6 +185,44 @@ def test_near_matches_are_searched_only_up_to_the_size_limit(genome, reports) ->
     assert "near-match sites were not checked" in perfect["off_target_amplicons"].detail
 
 
+def test_an_annealing_region_longer_than_primer3_allows_is_melted_on_its_three_prime_end(
+    tmp_path,
+) -> None:
+    rng = random.Random(599)
+
+    def gap(size: int) -> str:
+        return "".join(rng.choice("ACGT") for _ in range(size))
+
+    forward, reverse = gap(70), gap(70)
+    # The copy differs at base 20: inside the 3'-terminal 60, outside the terminal window.
+    bases = (
+        gap(100)
+        + forward
+        + gap(100)
+        + _mismatched(forward, 20)
+        + gap(200)
+        + reverse_complement(reverse)
+        + gap(100)
+    )
+    fasta = tmp_path / "long.fa"
+    fasta.write_text(f">chrL\n{bases}\n")
+    pair = (Primer("fwd", forward), Primer("rev", reverse))
+    end = len(bases) - 100
+    report = evaluate_pair_on_genome(*pair, fasta, "long", intended=Locus("chrL", 100, end))
+    assert [(one.start, one.end, one.mismatches) for one in report.amplicons] == [
+        (100, end, (0, 0)),
+        (270, end, (1, 0)),
+    ]
+    assert report["intended_amplicon"].status == "pass"
+    off_target = report["off_target_amplicons"]
+    assert (off_target.status, off_target.value) == ("warn", 1)
+    assert "3'-terminal 60 bases" in off_target.detail
+    # A perfect-match search runs no melting test, so it has nothing to say about one.
+    small = dataclasses.replace(THRESHOLDS, genome_size_limit=fasta.stat().st_size - 1)
+    perfect = evaluate_pair_on_genome(*pair, fasta, "long", thresholds=small)
+    assert "3'-terminal" not in perfect["off_target_amplicons"].detail
+
+
 def test_a_missing_tool_or_a_run_past_its_time_limit_raises_a_clear_error(
     genome, tmp_path, monkeypatch
 ) -> None:

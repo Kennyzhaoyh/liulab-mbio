@@ -9,6 +9,7 @@ from mbio.primers import (
     design_pair,
     evaluate_pair,
     evaluate_primer,
+    find_off_target_sites,
     melting_temperature,
 )
 from mbio.primers.evaluation import screen_primer
@@ -103,6 +104,21 @@ def test_a_primer_longer_than_primer3_allows_is_judged_on_its_three_prime_end() 
     long_tail = "GCTAGCTGACTGACTGATCGATCGATCGTAGCTAGCTGATCGATCGATGCTAGCTGA"
     report = evaluate_primer(Primer("long", long_tail + MCS_FWD))
     assert "60" in report["hairpin"].detail
+
+
+def test_an_annealing_region_longer_than_primer3_allows_has_its_off_target_sites_found() -> None:
+    # The copy of the first 75 bases differs at base 10, inside the primer's 3'-terminal 60.
+    head = "CAGATTTTCATATTATGCAGAAAATCTACTTCGCCTGATACGAGTCGGTTATCTTCGGATACTGTATAGTCCCAC"
+    spacer = "CTGGTGATCCTATGCTTGTGAGTACCCAGAAAATAGCGACGGACCGCGGTGTTAAGTGTC"
+    template = SequenceRecord(head + spacer + head[:10] + "C" + head[11:] + spacer)
+    sites = (BindingSite(0, 70, Strand.FORWARD),)
+    report = evaluate_primer(Primer("long", head[:70], binding_sites=sites), template)
+    off_target = report["off_target"]
+    assert (off_target.value, off_target.status) == (1, "warn")
+    assert "3'-terminal 60 bases" in off_target.detail
+    # The primitive returns primer3's numbers for what it is handed, so it refuses instead.
+    with pytest.raises(ValueError, match="at most 60 nt"):
+        find_off_target_sites(head[:70], template, sites)
 
 
 def test_a_primer_that_binds_one_place_has_no_off_target(puc19) -> None:

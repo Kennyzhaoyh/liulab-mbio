@@ -17,6 +17,12 @@ from mbio.sequence import (
     reverse_complement,
 )
 
+#: primer3 refuses a thermodynamic alignment on anything longer.
+_THERMO_MAX = 60
+
+#: What a check says when primer3 worked it out on the 3'-terminal `_THERMO_MAX` bases alone.
+_THERMO_NOTE = f"judged on the 3'-terminal {_THERMO_MAX} bases"
+
 
 @dataclass(frozen=True, slots=True)
 class Placement:
@@ -139,7 +145,13 @@ def find_priming_sites(
 
     A design tests thousands of candidates against one template, so what a sequence primes there
     is remembered: it depends on nothing but the sequence, the template and the thresholds.
+
+    Raises
+    ------
+    ValueError
+        If the sequence is longer than the 60 nt primer3 aligns, on any template.
     """
+    _refuse_past_thermo_max(sequence)
     return _priming_sites(sequence.upper(), template.sequence, template.topology, thresholds)
 
 
@@ -156,6 +168,11 @@ def find_off_target_sites(
     Dropping those first is what a primer is judged on, and the thermodynamics of a place no
     one asked about is never worked out.
 
+    Raises
+    ------
+    ValueError
+        As `find_priming_sites` does.
+
     Examples
     --------
     >>> template = SequenceRecord("CGGCGTAATCATGGTCATAGCTGTTTCC")
@@ -163,6 +180,7 @@ def find_off_target_sites(
     >>> find_off_target_sites("GGCGTAATCATGGTCATAGC", template, intended)
     ()
     """
+    _refuse_past_thermo_max(sequence)
     dna = sequence.upper()
     bases, topology = template.sequence, template.topology
     intended = {_three_prime_end(site, len(bases)) for site in placed}
@@ -176,6 +194,24 @@ def find_off_target_sites(
             if _three_prime_end(annealing[0], len(bases)) not in intended
         ),
     )
+
+
+def _refuse_past_thermo_max(sequence: str) -> None:
+    if len(sequence) > _THERMO_MAX:
+        raise ValueError(
+            f"primer3 aligns an annealing region of at most {_THERMO_MAX} nt, and this one is "
+            f"{len(sequence)} nt"
+        )
+
+
+def _thermo_sequence(sequence: str) -> tuple[str, str]:
+    """Return what primer3 can align of a sequence, its 3'-terminal bases, and the note saying so.
+
+    The note is empty where the sequence is whole.
+    """
+    if len(sequence) <= _THERMO_MAX:
+        return sequence, ""
+    return sequence[-_THERMO_MAX:], _THERMO_NOTE
 
 
 def _three_prime_end(site: BindingSite, length: int) -> tuple[int, Strand]:

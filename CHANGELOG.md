@@ -396,6 +396,12 @@ sets one.
   aligns, is refused at the call with an error naming the band. `design_primer`, `design_pair`
   and `ranked_pairs` all refuse it the same way. Before, such a design could end in a primer3
   error partway through, or return a primer whose longest candidates were never judged.
+- A primer you already hold, with an annealing region over 60 nt, is judged instead of ending
+  in a primer3 error. `evaluate_primer` finds its off-target sites on the region's 3'-terminal
+  60 bases, and the genome check melts each site on those bases while its search and amplicons
+  still span the whole region. Each check says so wherever it melted a site on those bases. `find_priming_sites` and
+  `find_off_target_sites`, which report primer3's numbers for the exact sequence they get,
+  refuse one over 60 nt with an error naming the limit.
 - Drawing a map into a directory that is not there makes it, as every verb taking an output
   directory already did. `mbio plot map RECORD -o figures/map.pdf` used to end in a traceback.
 - No Gateway clone is drawn with the site it no longer carries. The piece that moves brings the
