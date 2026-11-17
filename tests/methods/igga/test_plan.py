@@ -139,10 +139,15 @@ PRIMERS = Path(__file__).parents[3] / "docs" / "examples" / "ap1-library" / "pri
 
 
 @pytest.fixture(scope="module")
-def pooled(inputs, tmp_path_factory):
-    """The same build with a pool designed, and the files it writes."""
-    made = plan_igga(build(inputs, primers=PRIMERS), parts=LISTS)
-    return made, made.write(tmp_path_factory.mktemp("pooled"))
+def pooled(inputs):
+    """The same build with a pool designed."""
+    return plan_igga(build(inputs, primers=PRIMERS), parts=LISTS)
+
+
+@pytest.fixture(scope="module")
+def pooled_files(pooled, tmp_path_factory):
+    """That plan and the files it writes, which only a test reading one of them asks for."""
+    return pooled, pooled.write(tmp_path_factory.mktemp("pooled"))
 
 
 @pytest.fixture(scope="module")
@@ -156,16 +161,13 @@ def test_a_plain_run_orders_its_blocks_assembles_and_moves_the_library(plan):
 
 
 def test_a_pool_splits_ordering_from_making_the_cargo(pooled):
-    made, _files = pooled
-
     # This build states no primer plates, so the pool's primers are ordered with the pool.
-    assert [one.title for one in made.chain().protocols] == [ORDERING, CREATION, ASSEMBLY, FINAL]
+    assert [one.title for one in pooled.chain().protocols] == [ORDERING, CREATION, ASSEMBLY, FINAL]
 
 
 def test_a_run_without_a_pool_takes_its_cargo_from_the_vendors_tube(plan, pooled):
     """A run that archives nothing takes the blocks as the vendor shipped them."""
-    made, _files = pooled
-    plain, with_pool = plan.chain(), made.chain()
+    plain, with_pool = plan.chain(), pooled.chain()
     rounds = [
         next(one for one in chain.protocols if one.title == ASSEMBLY)
         for chain in (plain, with_pool)
@@ -240,9 +242,9 @@ def test_write_puts_every_file_in_one_directory_and_the_protocol_reads_back(writ
     assert all(path.read_text(encoding="utf-8") for path in files.protocol)
 
 
-def test_a_pool_writes_the_block_vector_each_position_closes_into(pooled):
+def test_a_pool_writes_the_block_vector_each_position_closes_into(pooled_files):
     """Only the cargo is synthesised, so a vector has to supply the stuffers either side of it."""
-    made, files = pooled
+    made, files = pooled_files
 
     assert [path.name for path in files.block_vectors] == [
         BLOCK_VECTOR_FILE.format(number=number) for number in (1, 2, 3)
@@ -323,18 +325,17 @@ def test_the_finished_library_is_read_for_linkage_and_for_representation(protoco
 
 def test_a_build_may_state_the_four_numbers_the_method_leaves_open(pooled):
     """Stated, each prints as this run's own and its hole goes; stated nowhere, the hole stands."""
-    made, _files = pooled
     stated = dataclasses.replace(
-        made,
+        pooled,
         build=dataclasses.replace(
-            made.build,
+            pooled.build,
             linkage_fidelity=0.9,
             final_assembly=FinalAssembly(75.0),
             pcr1_cycles=16,
             pcr2_cycles=18,
         ),
     )
-    before, after = whole(made.chain()), whole(stated.chain())
+    before, after = whole(pooled.chain()), whole(stated.chain())
     said = " ".join(
         text
         for step in after.steps
@@ -392,8 +393,7 @@ def test_every_sheet_the_run_writes_is_one_its_pages_can_link(plan, pooled):
     )
     assert [one.files for one in run.protocols] == [run.files] * len(run.protocols)
     # A build with a pool writes the two pool sheets and a block vector a position besides.
-    made, _files = pooled
-    assert set(made.chain().files) - set(run.files) == {
+    assert set(pooled.chain().files) - set(run.files) == {
         "../pool.tsv",
         "../pool-primers.tsv",
         "../block-vector-1.dna",
