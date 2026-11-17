@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from mbio.checks import STATUSES, Check, Status, worst
 from mbio.primers.evaluation import (
+    _THERMO_MAX,
     PairReport,
     PrimerReport,
     evaluate_primer,
@@ -66,7 +67,9 @@ def design_primer(
     Raises
     ------
     ValueError
-        If no annealing region fits the template there, or fits the placement.
+        If no annealing region fits the template there, or fits the placement, or if
+        `Thresholds.length` lets a candidate run past the 60 nt primer3 aligns. Such a band is
+        refused whole, never cut short, so a design tries every length it was given.
 
     Examples
     --------
@@ -141,7 +144,8 @@ def design_pair(
     ------
     ValueError
         If no annealing region fits the template at either end, or fits that end's placement,
-        or `exclude` holds every one at an end.
+        or `exclude` holds every one at an end, or `Thresholds.length` is refused as in
+        `design_primer`.
 
     Examples
     --------
@@ -367,7 +371,15 @@ def _candidates(
     polymerase: Polymerase,
     thresholds: Thresholds,
 ) -> list[_Candidate]:
-    """Return every binding site the placement allows, each ranked on what needs no alignment."""
+    """Return every binding site the placement allows, each ranked on what needs no alignment.
+
+    A band allowing a site longer than primer3 aligns is refused here, before any is judged.
+    """
+    if _longest(thresholds) > _THERMO_MAX:
+        raise ValueError(
+            f"primer3 aligns at most {_THERMO_MAX} nt, and this length band allows "
+            f"{_longest(thresholds)}: {thresholds.length}"
+        )
     candidates = []
     for site in _sites(template, position, strand, placement, thresholds):
         bases = template.bases(site.start, site.end)
@@ -407,7 +419,7 @@ def _sites(
     length = len(template)
     circular = template.topology == "circular"
     shortest = int(_finite(thresholds.length.warn_low, thresholds.length.low))
-    longest = min(int(_finite(thresholds.length.warn_high, thresholds.length.high)), length)
+    longest = min(_longest(thresholds), length)
     anchors, five = _anchors(position, placement)
     for anchor in anchors:
         for size in range(shortest, longest + 1):
@@ -421,6 +433,11 @@ def _sites(
             site = BindingSite(start, start + size, strand)
             if placement is None or placement.allows(site, template):
                 yield site
+
+
+def _longest(thresholds: Thresholds) -> int:
+    """Return the longest annealing region a design tries: the longest the band does not fail."""
+    return int(_finite(thresholds.length.warn_high, thresholds.length.high))
 
 
 def _anchors(position: int, placement: Placement | None) -> tuple[list[int], bool]:
