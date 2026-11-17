@@ -535,12 +535,16 @@ def _termini(
     return tuple(made)
 
 
+@cache
 def _shared(wild: str, suffix: str, usage: CodonUsage) -> str | None:
     """Return the residue a codon ending in `suffix` spells for `wild`, or ``None`` for a stop.
 
     The wild-type residue stands where any of its codons ends in those bases. Where none does,
     the codon this host counts most often for it is overwritten at the bases the overhang fixes,
     which is the smallest change to the DNA that spells the junction.
+
+    Cached: one host and 20 residues leave few answers, and reading a junction asks for them
+    once a member a candidate overhang.
     """
     if any(codon.endswith(suffix) for codon in _codons_for()[wild]):
         return wild
