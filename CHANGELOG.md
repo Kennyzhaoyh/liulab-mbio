@@ -399,7 +399,7 @@ sets one.
 - A primer you already hold, with an annealing region over 60 nt, is judged instead of ending
   in a primer3 error. `evaluate_primer` finds its off-target sites on the region's 3'-terminal
   60 bases, and the genome check melts each site on those bases while its search and amplicons
-  still span the whole region; each check says so. `find_priming_sites` and
+  still span the whole region. Each check says so wherever it melted a site on those bases. `find_priming_sites` and
   `find_off_target_sites`, which report primer3's numbers for the exact sequence they get,
   refuse one over 60 nt with an error naming the limit.
 - Drawing a map into a directory that is not there makes it, as every verb taking an output

@@ -19,7 +19,7 @@ from mbio.checks import Check, Status, worst_of
 from mbio.io import read_region
 from mbio.primers.design import ranked_pairs
 from mbio.primers.evaluation import PairReport
-from mbio.primers.placement import _THERMO_MAX, _THERMO_NOTE, Placement
+from mbio.primers.placement import Placement, _thermo_sequence
 from mbio.primers.polymerase import Q5, Polymerase
 from mbio.primers.thresholds import TARGET_TM, THRESHOLDS, Thresholds
 from mbio.sequence import (
@@ -193,9 +193,9 @@ def evaluate_on_genome(
     one it must match perfectly, and each report says near-match sites were not checked. A site
     must also melt within `Thresholds.off_target_margin` of a perfect match, or its amplicon is
     dropped. primer3 aligns at most 60 nt, so an annealing region past that melts on its
-    3'-terminal 60 bases, and the off-target check says so; the search and every amplicon still
-    span the whole region. Amplicons run up to `Thresholds.genome_max_amplicon` bases, or to
-    the intended one's length where that is longer.
+    3'-terminal 60 bases, and where near-matches were checked the off-target check says so; the
+    search and every amplicon still span the whole region. Amplicons run up to
+    `Thresholds.genome_max_amplicon` bases, or to the intended one's length where that is longer.
 
     Every amplicon other than the intended one is an off-target amplicon, so where no amplicon
     is named as intended, any amplicon warns. `ipcr` keeps 10,000 sites per primer on one
@@ -279,14 +279,7 @@ def evaluate_on_genome(
             tuple(amplicons),
             mismatches,
             thresholds.genome_terminal_window,
-            _checks(
-                amplicons,
-                locus,
-                lengths,
-                mismatches,
-                any(len(one) > _THERMO_MAX for one in regions),
-                thresholds,
-            ),
+            _checks(amplicons, locus, lengths, mismatches, _melting_note(regions), thresholds),
         )
         for (forward, reverse), regions, amplicons, locus in zip(
             pairs, annealing, found, loci, strict=True
@@ -595,9 +588,15 @@ def _melts(primer: str, target: str, thresholds: Thresholds) -> bool:
     """
     import primer3
 
-    primer, target = primer[-_THERMO_MAX:], target[:_THERMO_MAX]
+    primer = _thermo_sequence(primer)[0]
+    target = target[: len(primer)]
     perfect = primer3.calc_end_stability(primer, reverse_complement(primer)).tm
     return primer3.calc_end_stability(primer, target).tm >= perfect - thresholds.off_target_margin
+
+
+def _melting_note(regions: tuple[str, str]) -> str:
+    """Return the note a pair's melting test carries: empty where both regions are whole."""
+    return next((note for region in regions if (note := _thermo_sequence(region)[1])), "")
 
 
 def _annealing(primer: Primer) -> str:
@@ -615,7 +614,7 @@ def _checks(
     locus: Locus | None,
     lengths: Mapping[str, int],
     mismatches: int,
-    long: bool,
+    melting_note: str,
     thresholds: Thresholds,
 ) -> tuple[Check, ...]:
     off_target = [amplicon for amplicon in amplicons if not amplicon.intended]
@@ -624,8 +623,8 @@ def _checks(
         notes.append(f"and {len(off_target) - _LISTED} more")
     if not mismatches:
         notes.append("perfect matches only: near-match sites were not checked")
-    elif long:
-        notes.append(_THERMO_NOTE)
+    elif melting_note:
+        notes.append(melting_note)
     checks = [
         Check(
             "off_target_amplicons",

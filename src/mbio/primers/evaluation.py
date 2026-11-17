@@ -11,8 +11,7 @@ from functools import lru_cache
 
 from mbio.checks import Check, Status, worst, worst_of
 from mbio.primers.placement import (
-    _THERMO_MAX,
-    _THERMO_NOTE,
+    _thermo_sequence,
     amplicon_sizes,
     find_binding_sites,
     find_off_target_sites,
@@ -346,12 +345,6 @@ def _run_check(sequence: str, thresholds: Thresholds) -> Check:
         longest,
         f"{guanines} Gs in a row" if guanine_status != "pass" else "",
     )
-
-
-def _thermo_sequence(sequence: str) -> tuple[str, str]:
-    if len(sequence) <= _THERMO_MAX:
-        return sequence, ""
-    return sequence[-_THERMO_MAX:], _THERMO_NOTE
 
 
 @lru_cache(maxsize=1 << 15)

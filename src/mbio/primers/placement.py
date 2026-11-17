@@ -204,6 +204,16 @@ def _refuse_past_thermo_max(sequence: str) -> None:
         )
 
 
+def _thermo_sequence(sequence: str) -> tuple[str, str]:
+    """Return what primer3 can align of a sequence, its 3'-terminal bases, and the note saying so.
+
+    The note is empty where the sequence is whole.
+    """
+    if len(sequence) <= _THERMO_MAX:
+        return sequence, ""
+    return sequence[-_THERMO_MAX:], _THERMO_NOTE
+
+
 def _three_prime_end(site: BindingSite, length: int) -> tuple[int, Strand]:
     """Return the base a site reads from and its strand, which is where a primer extends."""
     end = site.start if site.strand is Strand.REVERSE else site.end - 1
