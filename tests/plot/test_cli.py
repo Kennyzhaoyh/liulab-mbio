@@ -2,7 +2,6 @@
 
 import dataclasses
 import re
-import struct
 from pathlib import Path
 
 import pytest
@@ -20,8 +19,31 @@ def _run(*arguments: str) -> tuple[int, list[str]]:
     return result.exit_code, re.sub(r"\x1b\[[0-9;]*m", "", result.output).splitlines()
 
 
+@pytest.fixture
+def rastered(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, float]]:
+    """Record the path and dpi of every PNG handed to molviz, and raster none of them.
+
+    Rastering an SVG starts a converter that costs far more than the drawing, and what it makes
+    of the dpi is molviz's own promise and molviz's own tests. What this file checks is the
+    handover: the path the command asks for, and the dpi it passes on.
+    """
+    import molviz
+
+    rastered: list[tuple[Path, float]] = []
+    write = molviz.Drawing.write
+
+    def spy(self: molviz.Drawing, path: Path, dpi: float = 300) -> None:
+        if Path(path).suffix.lower() == ".png":
+            rastered.append((Path(path), dpi))
+            return
+        write(self, path, dpi=dpi)
+
+    monkeypatch.setattr(molviz.Drawing, "write", spy)
+    return rastered
+
+
 def test_one_run_hands_molviz_every_option_and_writes_each_file_asked_for(
-    puc19: SequenceRecord, tmp_path: Path, handed: Handed
+    puc19: SequenceRecord, tmp_path: Path, handed: Handed, rastered: list[tuple[Path, float]]
 ) -> None:
     # Text of a span's form is a span, even where a feature is named so.
     record = tmp_path / "named.dna"
@@ -48,11 +70,10 @@ def test_one_run_hands_molviz_every_option_and_writes_each_file_asked_for(
         "enzymes": ["EcoRI", "BamHI"],
         "bases_per_row": 30,
     }
-    width = re.search(r'<svg[^>]* width="([\d.]+)"', outs[1].read_text(encoding="utf-8"))
-    assert width is not None
-    # 18 dpi is a quarter of a pixel a point.
-    png = struct.unpack(">I", outs[2].read_bytes()[16:20])[0]
-    assert png == pytest.approx(float(width[1]) / 4, abs=1)
+    assert re.search(r'<svg[^>]* width="[\d.]+"', outs[1].read_text(encoding="utf-8")) is not None
+    assert [path.is_file() and bool(path.read_bytes()) for path in outs[:2]] == [True, True]
+    # The PNG is the one output a converter rasters, so what is checked here is the handover.
+    assert rastered == [(outs[2], 18)]
 
 
 def test_the_command_prints_what_the_map_hid_after_the_files_written(tmp_path: Path) -> None:
