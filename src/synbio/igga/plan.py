@@ -27,7 +27,7 @@ import dataclasses
 import os
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -277,6 +277,9 @@ class LibraryPlan:
     pool: PoolPlan | None = None
     working: Working | None = None
     seated: SeatedParts | None = None
+    # Where `reads` keeps its one design. A list and not an attribute because the plan is
+    # frozen, and out of `__init__`, `repr` and `==` because it holds no choice of the build's.
+    _designed: list[ReadPairs] = field(default_factory=list, init=False, repr=False, compare=False)
 
     @property
     def product(self) -> SequenceRecord:
@@ -303,8 +306,15 @@ class LibraryPlan:
 
     @property
     def reads(self) -> ReadPairs:
-        """The pairs that read this library back, designed against the records it simulated."""
-        return read_pairs(self.scheme, self.rounds, self.working)
+        """The pairs that read this library back, designed against the records it simulated.
+
+        Designed when first asked for, and once a plan: the pairs follow from the plan, which
+        cannot change, and designing them is the most expensive thing a plan does after being
+        made.
+        """
+        if not self._designed:
+            self._designed.append(read_pairs(self.scheme, self.rounds, self.working))
+        return self._designed[0]
 
     @property
     def validations(self) -> tuple[dmx.Validation, ...]:
